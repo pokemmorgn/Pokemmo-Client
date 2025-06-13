@@ -1,86 +1,101 @@
-// === CONFIGURATION ===
-const SERVER_URL = "wss://de-fra-4204ac69.colyseus.cloud";
+const serverUrl = "wss://de-fra-4204ac69.colyseus.cloud";
+const roomName = "world";
+let room;
+let playerId;
+let players = {}; // Liste de tous les sprites joueurs
 
-// === INIT PHASER ===
 const config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
-    backgroundColor: "#222",
-    physics: { default: 'arcade' },
-    scene: { preload, create, update }
+    backgroundColor: "#111",
+    scene: {
+        preload,
+        create,
+        update
+    }
 };
+
 const game = new Phaser.Game(config);
 
-let cursors;
-let client;
-let room;
-let playerId;
-let players = {}; // {id: sprite}
-
 function preload() {
-    // Optionnel: charge des assets ici si besoin
+    this.load.image('player', 'https://i.imgur.com/1Xw1hBM.png'); // exemple de sprite
 }
 
 function create() {
-    cursors = this.input.keyboard.createCursorKeys();
+    // Connexion Colyseus
+    const client = new Colyseus.Client(serverUrl);
 
-    // Connexion à Colyseus Cloud
-    client = new Colyseus.Client(SERVER_URL);
-
-    client.joinOrCreate("world").then(r => {
+    client.joinOrCreate(roomName).then(r => {
         room = r;
         playerId = room.sessionId;
-        console.log("Connected!", playerId);
 
-        // Ajout des joueurs existants (état initial)
-        Object.entries(room.state.players).forEach(([id, player]) => {
-            addOrUpdatePlayer(this, id, player);
+        // Ajout des joueurs déjà présents
+        room.state.players.forEach((player, sessionId) => {
+            addPlayerSprite(this, sessionId, player);
         });
 
-        // Mise à jour de l'état complet
-        room.state.players.onAdd = (player, id) => {
-            addOrUpdatePlayer(this, id, player);
-        };
-        room.state.players.onRemove = (player, id) => {
-            if (players[id]) {
-                players[id].destroy();
-                delete players[id];
-            }
-        };
-        // Déplacement des joueurs
-        room.state.players.onChange = (player, id) => {
-            addOrUpdatePlayer(this, id, player);
+        // Nouveaux joueurs
+        room.state.players.onAdd = (player, sessionId) => {
+            addPlayerSprite(this, sessionId, player);
         };
 
-    }).catch(err => {
-        console.error("Failed to connect:", err);
+        // Suppression joueur
+        room.state.players.onRemove = (player, sessionId) => {
+            if (players[sessionId]) {
+                players[sessionId].destroy();
+                delete players[sessionId];
+            }
+        };
+
+        // Mouvement joueurs
+        room.state.players.onChange = (player, sessionId) => {
+            if (players[sessionId]) {
+                players[sessionId].x = player.x;
+                players[sessionId].y = player.y;
+            }
+        };
+
+        // Gère le tactile
+        this.input.on('pointerdown', pointer => {
+            moveTo(pointer.worldX, pointer.worldY);
+        });
+        this.input.on('pointermove', pointer => {
+            if (pointer.isDown) moveTo(pointer.worldX, pointer.worldY);
+        });
+
+        // Si tu veux garder les flèches clavier aussi :
+        this.cursors = this.input.keyboard.createCursorKeys();
     });
+
+    // Ajoute une méthode d'envoi de mouvement
+    function moveTo(x, y) {
+        if (room && playerId) {
+            room.send({ x, y });
+        }
+    }
+}
+
+function addPlayerSprite(scene, sessionId, player) {
+    players[sessionId] = scene.add.sprite(player.x, player.y, 'player');
 }
 
 function update() {
-    if (!room) return;
+    // Optionnel : permet le contrôle au clavier aussi
+    if (this.cursors && room && playerId) {
+        let speed = 2;
+        let moved = false;
+        let p = room.state.players.get(playerId);
+        if (!p) return;
 
-    let input = { x: 0, y: 0 };
-    if (cursors.left.isDown) input.x = -1;
-    if (cursors.right.isDown) input.x = 1;
-    if (cursors.up.isDown) input.y = -1;
-    if (cursors.down.isDown) input.y = 1;
+        let x = p.x, y = p.y;
+        if (this.cursors.left.isDown)  { x -= speed; moved = true; }
+        if (this.cursors.right.isDown) { x += speed; moved = true; }
+        if (this.cursors.up.isDown)    { y -= speed; moved = true; }
+        if (this.cursors.down.isDown)  { y += speed; moved = true; }
 
-    // Envoie l'input uniquement si bougé
-    if (input.x !== 0 || input.y !== 0) {
-        room.send("move", input);
+        if (moved) {
+            room.send({ x, y });
+        }
     }
-}
-
-// Ajoute ou met à jour un joueur
-function addOrUpdatePlayer(scene, id, player) {
-    if (!players[id]) {
-        // Crée un sprite si pas encore là
-        let color = id === playerId ? 0xff5555 : 0x55aaff;
-        let sprite = scene.add.rectangle(player.x, player.y, 32, 32, color);
-        players[id] = sprite;
-    }
-    players[id].x = player.x;
-    players[id].y = player.y;
 }
