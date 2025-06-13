@@ -30,11 +30,10 @@ function create() {
         room = r;
         playerId = room.sessionId;
 
-        // Ajout des joueurs déjà présents (fix objet !)
-        for (let sessionId in room.state.players) {
-            let player = room.state.players[sessionId];
+        // Ajout des joueurs déjà présents (MAPSCHEMA !)
+        room.state.players.forEach((player, sessionId) => {
             addPlayerSprite(this, sessionId, player);
-        }
+        });
 
         // Nouveaux joueurs
         room.state.players.onAdd = (player, sessionId) => {
@@ -65,11 +64,11 @@ function create() {
             if (pointer.isDown) moveTo(pointer.worldX, pointer.worldY);
         });
 
-        // Si tu veux garder les flèches clavier aussi :
+        // Flèches clavier
         this.cursors = this.input.keyboard.createCursorKeys();
     });
 
-    // Ajoute une méthode d'envoi de mouvement
+    // Méthode pour déplacer son joueur
     function moveTo(x, y) {
         if (room && playerId) {
             room.send({ x, y });
@@ -79,17 +78,17 @@ function create() {
 
 function addPlayerSprite(scene, sessionId, player) {
     let tint = (sessionId === playerId) ? 0xffaaaa : 0xaaaaff;
-    let sprite = scene.add.sprite(player.x, player.y, 'player');
+    let sprite = scene.add.sprite(player.x || 100, player.y || 100, 'player');
     sprite.setTint(tint);
     players[sessionId] = sprite;
 }
 
 function update() {
-    // Optionnel : permet le contrôle au clavier aussi
+    // Contrôle au clavier aussi
     if (this.cursors && room && playerId) {
         let speed = 2;
         let moved = false;
-        let p = room.state.players[playerId];
+        let p = room.state.players.get(playerId);
         if (!p) return;
 
         let x = p.x, y = p.y;
