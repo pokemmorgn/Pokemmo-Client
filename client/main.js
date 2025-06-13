@@ -30,10 +30,11 @@ function create() {
         room = r;
         playerId = room.sessionId;
 
-        // Ajout des joueurs déjà présents
-        room.state.players.forEach((player, sessionId) => {
+        // Ajout des joueurs déjà présents (fix objet !)
+        for (let sessionId in room.state.players) {
+            let player = room.state.players[sessionId];
             addPlayerSprite(this, sessionId, player);
-        });
+        }
 
         // Nouveaux joueurs
         room.state.players.onAdd = (player, sessionId) => {
@@ -56,7 +57,7 @@ function create() {
             }
         };
 
-        // Gère le tactile
+        // Gère le tactile (mobile & desktop)
         this.input.on('pointerdown', pointer => {
             moveTo(pointer.worldX, pointer.worldY);
         });
@@ -77,7 +78,10 @@ function create() {
 }
 
 function addPlayerSprite(scene, sessionId, player) {
-    players[sessionId] = scene.add.sprite(player.x, player.y, 'player');
+    let tint = (sessionId === playerId) ? 0xffaaaa : 0xaaaaff;
+    let sprite = scene.add.sprite(player.x, player.y, 'player');
+    sprite.setTint(tint);
+    players[sessionId] = sprite;
 }
 
 function update() {
@@ -85,7 +89,7 @@ function update() {
     if (this.cursors && room && playerId) {
         let speed = 2;
         let moved = false;
-        let p = room.state.players.get(playerId);
+        let p = room.state.players[playerId];
         if (!p) return;
 
         let x = p.x, y = p.y;
