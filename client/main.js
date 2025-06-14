@@ -1,104 +1,84 @@
-const serverUrl = "wss://de-fra-4204ac69.colyseus.cloud";
-const roomName = "world";
+const client = new Colyseus.Client("https://de-fra-4204ac69.colyseus.cloud");
+
 let room;
-let playerId;
-let players = {}; // Liste de tous les sprites joueurs
+let players = {}; // stocke les sprites Phaser par sessionId
 
 const config = {
-    type: Phaser.AUTO,
-    width: 800,
-    height: 600,
-    backgroundColor: "#111",
-    scene: {
-        preload,
-        create,
-        update
-    }
+  type: Phaser.AUTO,
+  width: 800,
+  height: 600,
+  scene: {
+    preload: preload,
+    create: create,
+    update: update,
+  }
 };
 
 const game = new Phaser.Game(config);
 
 function preload() {
-    this.load.image('player', 'https://i.imgur.com/1Xw1hBM.png'); // exemple de sprite
+  // Rien à charger pour cet exemple simple
 }
 
 function create() {
-    // Connexion Colyseus
-    const client = new Colyseus.Client(serverUrl);
-
-    client.joinOrCreate(roomName).then(r => {
-        room = r;
-        playerId = room.sessionId;
-
-        // Ajout des joueurs déjà présents (MAPSCHEMA !)
-        room.state.players.forEach((player, sessionId) => {
-            addPlayerSprite(this, sessionId, player);
-        });
-
-        // Nouveaux joueurs
-        room.state.players.onAdd = (player, sessionId) => {
-            addPlayerSprite(this, sessionId, player);
-        };
-
-        // Suppression joueur
-        room.state.players.onRemove = (player, sessionId) => {
-            if (players[sessionId]) {
-                players[sessionId].destroy();
-                delete players[sessionId];
-            }
-        };
-
-        // Mouvement joueurs
-        room.state.players.onChange = (player, sessionId) => {
-            if (players[sessionId]) {
-                players[sessionId].x = player.x;
-                players[sessionId].y = player.y;
-            }
-        };
-
-        // Gère le tactile (mobile & desktop)
-        this.input.on('pointerdown', pointer => {
-            moveTo(pointer.worldX, pointer.worldY);
-        });
-        this.input.on('pointermove', pointer => {
-            if (pointer.isDown) moveTo(pointer.worldX, pointer.worldY);
-        });
-
-        // Flèches clavier
-        this.cursors = this.input.keyboard.createCursorKeys();
-    });
-
-    // Méthode pour déplacer son joueur
-    function moveTo(x, y) {
-        if (room && playerId) {
-            room.send({ x, y });
-        }
-    }
-}
-
-function addPlayerSprite(scene, sessionId, player) {
-    let tint = (sessionId === playerId) ? 0xffaaaa : 0xaaaaff;
-    let sprite = scene.add.sprite(player.x || 100, player.y || 100, 'player');
-    sprite.setTint(tint);
-    players[sessionId] = sprite;
+  connectToRoom();
 }
 
 function update() {
-    // Contrôle au clavier aussi
-    if (this.cursors && room && playerId) {
-        let speed = 2;
-        let moved = false;
-        let p = room.state.players.get(playerId);
-        if (!p) return;
+  if (!room) return;
 
-        let x = p.x, y = p.y;
-        if (this.cursors.left.isDown)  { x -= speed; moved = true; }
-        if (this.cursors.right.isDown) { x += speed; moved = true; }
-        if (this.cursors.up.isDown)    { y -= speed; moved = true; }
-        if (this.cursors.down.isDown)  { y += speed; moved = true; }
+  // Exemple : déplacement simple clavier avec flèches
+  const cursors = this.input.keyboard.createCursorKeys();
 
-        if (moved) {
-            room.send({ x, y });
-        }
-    }
+  let playerX = players[room.sessionId]?.x || 100;
+  let playerY = players[room.sessionId]?.y || 100;
+
+  if (cursors.left.isDown) playerX -= 2;
+  else if (cursors.right.isDown) playerX += 2;
+  if (cursors.up.isDown) playerY -= 2;
+  else if (cursors.down.isDown) playerY += 2;
+
+  if (room && players[room.sessionId]) {
+    // Envoie la nouvelle position au serveur
+    room.send("move", { x: playerX, y: playerY });
+  }
+}
+
+async function connectToRoom() {
+  try {
+    room = await client.joinOrCreate("world");
+    console.log("✅ Connecté à la room", room.sessionId);
+
+    // Crée un cercle Phaser pour chaque joueur dans l’état
+    room.state.players.onAdd = (player, sessionId) => {
+      // création d’un cercle pour le joueur
+      players[sessionId] = this.add.circle(player.x, player.y, 16, 0x00ff00);
+      if (sessionId === room.sessionId) {
+        players[sessionId].setFillStyle(0x0000ff); // couleur différente pour soi
+      }
+    };
+
+    room.state.players.onChange = (player, sessionId) => {
+      // met à jour la position du sprite
+      if (players[sessionId]) {
+        players[sessionId].x = player.x;
+        players[sessionId].y = player.y;
+      }
+    };
+
+    room.state.players.onRemove = (player, sessionId) => {
+      // détruit le sprite quand le joueur quitte
+      if (players[sessionId]) {
+        players[sessionId].destroy();
+        delete players[sessionId];
+      }
+    };
+
+    room.onMessage((message) => {
+      console.log("📩 Message reçu :", message);
+    });
+
+  } catch (e) {
+    console.error("❌ Erreur de connexion :", e);
+  }
 }
