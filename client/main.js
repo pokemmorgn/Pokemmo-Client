@@ -1,4 +1,4 @@
-const client = new Colyseus.Client("https://de-fra-4204ac69.colyseus.cloud");
+const client = new Colyseus.Client("https://de-fra-376a75b9.colyseus.cloud");
 
 let room;
 let players = {}; // stocke les sprites Phaser par sessionId
